@@ -1,2 +1,5 @@
 *
 !.gitignore
+# Generated API docs (php artisan scribe:generate), served at /docs.openapi and /docs.postman
+!scribe/
+!scribe/*

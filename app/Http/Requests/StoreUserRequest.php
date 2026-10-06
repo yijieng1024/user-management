@@ -37,6 +37,42 @@ class StoreUserRequest extends FormRequest
     }
 
     /**
+     * Describe the body parameters for the API documentation (Scribe).
+     * The rules above remain the source of types and required fields.
+     *
+     * @return array<string, array{description: string, example?: mixed}>
+     */
+    public function bodyParameters(): array
+    {
+        return [
+            'name' => [
+                'description' => 'Full name. Max 255 characters.',
+                'example' => 'Ahmad Faizal bin Hassan',
+            ],
+            'email' => [
+                'description' => 'Email address. Must be unique, including soft-deleted users.',
+                'example' => 'ahmad.faizal@example.com',
+            ],
+            'phone_number' => [
+                'description' => 'Phone number, stored as text so leading zeros and `+60` are kept. Must be unique, including soft-deleted users. Max 20 characters.',
+                'example' => '012-3456789',
+            ],
+            'password' => [
+                'description' => 'Password. At least 8 characters (in production: at least 12, with upper and lower case letters, a number and a symbol, and not found in known data leaks).',
+                'example' => 'S3cure!Passw0rd',
+            ],
+            'status' => [
+                'description' => 'One of `active`, `inactive` or `suspended`.',
+                'example' => 'active',
+            ],
+            'is_admin' => [
+                'description' => 'Whether the user is an admin.',
+                'example' => false,
+            ],
+        ];
+    }
+
+    /**
      * Get the unique rule for the given users column.
      */
     protected function uniqueRule(string $column): Unique

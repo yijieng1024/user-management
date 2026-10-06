@@ -1,0 +1,1043 @@
+openapi: 3.0.3
+info:
+  title: 'User Management API Documentation'
+  description: 'REST API for the admin-only User Management system: JWT authentication and user management (list, create, show, update, soft delete, bulk delete).'
+  version: 1.0.0
+servers:
+  -
+    url: 'http://localhost:8000'
+tags:
+  -
+    name: Authentication
+    description: 'Get, refresh and revoke the JWT used to call the other endpoints.'
+  -
+    name: Users
+    description: 'Manage users. Every endpoint needs a token from an active admin; a suspended admin is blocked on their next request, even with an unexpired token. Limited to 60 requests per minute.'
+components:
+  securitySchemes:
+    default:
+      type: http
+      scheme: bearer
+      description: 'Get a token from <code>POST /api/login</code> (admin email and password), then send it as <code>Authorization: Bearer {token}</code>. Tokens last 60 minutes and can be refreshed with <code>POST /api/refresh</code> for up to 1 day.'
+security:
+  -
+    default: []
+paths:
+  /api/login:
+    post:
+      summary: 'Log in'
+      operationId: logIn
+      description: "Exchange an admin's email and password for a JWT. Only admins whose status is `active` get a token. Limited to 5 requests per minute per email + IP address."
+      parameters: []
+      responses:
+        200:
+          description: 'Logged in. Send the token as `Authorization: Bearer {access_token}`. `expires_in` is in seconds.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature
+                  token_type: bearer
+                  expires_in: 3600
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature
+                  token_type:
+                    type: string
+                    example: bearer
+                  expires_in:
+                    type: integer
+                    example: 3600
+        422:
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: 'Wrong email or password'
+                    type: object
+                    example:
+                      message: 'These credentials do not match our records.'
+                      errors:
+                        email:
+                          - 'These credentials do not match our records.'
+                    properties:
+                      message:
+                        type: string
+                        example: 'These credentials do not match our records.'
+                      errors:
+                        type: object
+                        properties:
+                          email:
+                            type: array
+                            example:
+                              - 'These credentials do not match our records.'
+                            items:
+                              type: string
+                  -
+                    description: 'Correct password, but the user is not an admin'
+                    type: object
+                    example:
+                      message: 'You do not have admin access.'
+                      errors:
+                        email:
+                          - 'You do not have admin access.'
+                    properties:
+                      message:
+                        type: string
+                        example: 'You do not have admin access.'
+                      errors:
+                        type: object
+                        properties:
+                          email:
+                            type: array
+                            example:
+                              - 'You do not have admin access.'
+                            items:
+                              type: string
+                  -
+                    description: 'Correct password, but the admin is inactive or suspended'
+                    type: object
+                    example:
+                      message: 'Your account is not active.'
+                      errors:
+                        email:
+                          - 'Your account is not active.'
+                    properties:
+                      message:
+                        type: string
+                        example: 'Your account is not active.'
+                      errors:
+                        type: object
+                        properties:
+                          email:
+                            type: array
+                            example:
+                              - 'Your account is not active.'
+                            items:
+                              type: string
+        429:
+          description: 'More than 5 attempts in a minute for this email + IP address'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Too Many Attempts.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Too Many Attempts.'
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  description: "The admin's email address."
+                  example: admin@example.com
+                password:
+                  type: string
+                  description: "The admin's password."
+                  example: password
+              required:
+                - email
+                - password
+      security: []
+  /api/refresh:
+    post:
+      summary: 'Refresh a token'
+      operationId: refreshAToken
+      description: 'Send the current token (it may already be expired) and get a new one. The old token is blacklisted. A token can be refreshed for up to 1 day after it was first issued. Fails if the user is no longer an active admin.'
+      parameters: []
+      responses:
+        200:
+          description: 'New token'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.new-signature
+                  token_type: bearer
+                  expires_in: 3600
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.new-signature
+                  token_type:
+                    type: string
+                    example: bearer
+                  expires_in:
+                    type: integer
+                    example: 3600
+        401:
+          description: 'No token, an invalid or blacklisted token, or older than the 1-day refresh window'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The user is no longer an active admin. Both the old and the new token are blacklisted.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+      tags:
+        - Authentication
+  /api/logout:
+    post:
+      summary: 'Log out'
+      operationId: logOut
+      description: 'Blacklist the current token so it can no longer be used.'
+      parameters: []
+      responses:
+        200:
+          description: 'Logged out'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Successfully logged out.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Successfully logged out.'
+        401:
+          description: 'No token, or the token is invalid, expired or already blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+      tags:
+        - Authentication
+  /api/users/bulk-delete:
+    post:
+      summary: 'Delete many users'
+      operationId: deleteManyUsers
+      description: "Soft deletes all the given users in a single query. The logged-in admin's own ID is always skipped. If any ID is invalid, nothing is deleted. Returns how many users were deleted."
+      parameters: []
+      responses:
+        200:
+          description: 'Users deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  deleted: 3
+                properties:
+                  deleted:
+                    type: integer
+                    example: 3
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The token belongs to a user who is no longer an active admin'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+        422:
+          description: 'An ID does not exist or the user is already deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'One or more of the selected users do not exist or have already been deleted.'
+                  errors:
+                    ids:
+                      - 'One or more of the selected users do not exist or have already been deleted.'
+                properties:
+                  message:
+                    type: string
+                    example: 'One or more of the selected users do not exist or have already been deleted.'
+                  errors:
+                    type: object
+                    properties:
+                      ids:
+                        type: array
+                        example:
+                          - 'One or more of the selected users do not exist or have already been deleted.'
+                        items:
+                          type: string
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  description: "IDs of the users to delete: 1 to 1000 distinct IDs of existing, non-deleted users. The logged-in admin's own ID is skipped."
+                  example:
+                    - 12
+                    - 15
+                    - 18
+                  items:
+                    type: integer
+              required:
+                - ids
+  /api/users:
+    get:
+      summary: 'List users'
+      operationId: listUsers
+      description: 'Users are returned newest first, 10 per page. Soft-deleted users are not included. `status` and `search` can be combined.'
+      parameters:
+        -
+          in: query
+          name: status
+          description: 'Only return users with this status: `active`, `inactive` or `suspended`. Any other value is ignored.'
+          example: active
+          required: false
+          schema:
+            type: string
+            description: 'Only return users with this status: `active`, `inactive` or `suspended`. Any other value is ignored.'
+            example: active
+            enum:
+              - active
+              - inactive
+              - suspended
+        -
+          in: query
+          name: search
+          description: 'Return users whose name, email or phone number contains this text.'
+          example: ahmad
+          required: false
+          schema:
+            type: string
+            description: 'Return users whose name, email or phone number contains this text.'
+            example: ahmad
+        -
+          in: query
+          name: page
+          description: 'The page number.'
+          example: 1
+          required: false
+          schema:
+            type: integer
+            description: 'The page number.'
+            example: 1
+      responses:
+        200:
+          description: 'A page of users'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    -
+                      id: 1
+                      name: 'Ahmad Faizal bin Hassan'
+                      email: ahmad.faizal@example.com
+                      phone_number: 012-3456789
+                      status: active
+                      is_admin: false
+                      created_at: '2026-10-01T09:00:00+00:00'
+                      updated_at: '2026-10-01T09:00:00+00:00'
+                    -
+                      id: 1
+                      name: 'Ahmad Faizal bin Hassan'
+                      email: ahmad.faizal@example.com
+                      phone_number: 012-3456789
+                      status: active
+                      is_admin: false
+                      created_at: '2026-10-01T09:00:00+00:00'
+                      updated_at: '2026-10-01T09:00:00+00:00'
+                  links:
+                    first: '/?page=1'
+                    last: '/?page=1'
+                    prev: null
+                    next: null
+                  meta:
+                    current_page: 1
+                    from: 1
+                    last_page: 1
+                    links:
+                      -
+                        url: null
+                        label: '&laquo; Previous'
+                        page: null
+                        active: false
+                      -
+                        url: '/?page=1'
+                        label: '1'
+                        page: 1
+                        active: true
+                      -
+                        url: null
+                        label: 'Next &raquo;'
+                        page: null
+                        active: false
+                    path: /
+                    per_page: 10
+                    to: 2
+                    total: 2
+                properties:
+                  data:
+                    type: array
+                    example:
+                      -
+                        id: 1
+                        name: 'Ahmad Faizal bin Hassan'
+                        email: ahmad.faizal@example.com
+                        phone_number: 012-3456789
+                        status: active
+                        is_admin: false
+                        created_at: '2026-10-01T09:00:00+00:00'
+                        updated_at: '2026-10-01T09:00:00+00:00'
+                      -
+                        id: 1
+                        name: 'Ahmad Faizal bin Hassan'
+                        email: ahmad.faizal@example.com
+                        phone_number: 012-3456789
+                        status: active
+                        is_admin: false
+                        created_at: '2026-10-01T09:00:00+00:00'
+                        updated_at: '2026-10-01T09:00:00+00:00'
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        name:
+                          type: string
+                          example: 'Ahmad Faizal bin Hassan'
+                        email:
+                          type: string
+                          example: ahmad.faizal@example.com
+                        phone_number:
+                          type: string
+                          example: 012-3456789
+                        status:
+                          type: string
+                          example: active
+                        is_admin:
+                          type: boolean
+                          example: false
+                        created_at:
+                          type: string
+                          example: '2026-10-01T09:00:00+00:00'
+                        updated_at:
+                          type: string
+                          example: '2026-10-01T09:00:00+00:00'
+                  links:
+                    type: object
+                    properties:
+                      first:
+                        type: string
+                        example: '/?page=1'
+                      last:
+                        type: string
+                        example: '/?page=1'
+                      prev:
+                        type: string
+                        example: null
+                        nullable: true
+                      next:
+                        type: string
+                        example: null
+                        nullable: true
+                  meta:
+                    type: object
+                    properties:
+                      current_page:
+                        type: integer
+                        example: 1
+                      from:
+                        type: integer
+                        example: 1
+                      last_page:
+                        type: integer
+                        example: 1
+                      links:
+                        type: array
+                        example:
+                          -
+                            url: null
+                            label: '&laquo; Previous'
+                            page: null
+                            active: false
+                          -
+                            url: '/?page=1'
+                            label: '1'
+                            page: 1
+                            active: true
+                          -
+                            url: null
+                            label: 'Next &raquo;'
+                            page: null
+                            active: false
+                        items:
+                          type: object
+                          properties:
+                            url:
+                              type: string
+                              example: null
+                              nullable: true
+                            label:
+                              type: string
+                              example: '&laquo; Previous'
+                            page:
+                              type: string
+                              example: null
+                              nullable: true
+                            active:
+                              type: boolean
+                              example: false
+                      path:
+                        type: string
+                        example: /
+                      per_page:
+                        type: integer
+                        example: 10
+                      to:
+                        type: integer
+                        example: 2
+                      total:
+                        type: integer
+                        example: 2
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The token belongs to a user who is no longer an active admin'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+      tags:
+        - Users
+    post:
+      summary: 'Create a user'
+      operationId: createAUser
+      description: 'Users created through the API are never admins: `is_admin` is ignored if sent. Admins can only be created from the web Users page.'
+      parameters: []
+      responses:
+        201:
+          description: 'User created'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 1
+                    name: 'Ahmad Faizal bin Hassan'
+                    email: ahmad.faizal@example.com
+                    phone_number: 012-3456789
+                    status: active
+                    is_admin: false
+                    created_at: '2026-10-01T09:00:00+00:00'
+                    updated_at: '2026-10-01T09:00:00+00:00'
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: 'Ahmad Faizal bin Hassan'
+                      email:
+                        type: string
+                        example: ahmad.faizal@example.com
+                      phone_number:
+                        type: string
+                        example: 012-3456789
+                      status:
+                        type: string
+                        example: active
+                      is_admin:
+                        type: boolean
+                        example: false
+                      created_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+                      updated_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The token belongs to a user who is no longer an active admin'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+        422:
+          description: 'Validation error. Soft-deleted users still count as taking their email and phone number.'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'The email has already been taken. (and 1 more error)'
+                  errors:
+                    email:
+                      - 'The email has already been taken.'
+                    phone_number:
+                      - 'The phone number has already been taken.'
+                properties:
+                  message:
+                    type: string
+                    example: 'The email has already been taken. (and 1 more error)'
+                  errors:
+                    type: object
+                    properties:
+                      email:
+                        type: array
+                        example:
+                          - 'The email has already been taken.'
+                        items:
+                          type: string
+                      phone_number:
+                        type: array
+                        example:
+                          - 'The phone number has already been taken.'
+                        items:
+                          type: string
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Full name. Max 255 characters. Must not be greater than 255 characters.'
+                  example: 'Ahmad Faizal bin Hassan'
+                email:
+                  type: string
+                  description: 'Email address. Must be unique, including soft-deleted users. Must be a valid email address. Must not be greater than 255 characters.'
+                  example: ahmad.faizal@example.com
+                phone_number:
+                  type: string
+                  description: 'Phone number, stored as text so leading zeros and `+60` are kept. Must be unique, including soft-deleted users. Max 20 characters. Must not be greater than 20 characters.'
+                  example: 012-3456789
+                password:
+                  type: string
+                  description: 'Password. At least 8 characters (in production: at least 12, with upper and lower case letters, a number and a symbol, and not found in known data leaks).'
+                  example: S3cure!Passw0rd
+                status:
+                  type: string
+                  description: 'One of `active`, `inactive` or `suspended`.'
+                  example: active
+                  enum:
+                    - active
+                    - inactive
+                    - suspended
+                password_confirmation:
+                  type: string
+                  description: 'Must match `password`.'
+                  example: S3cure!Passw0rd
+              required:
+                - name
+                - email
+                - phone_number
+                - password
+                - status
+                - password_confirmation
+  '/api/users/{id}':
+    get:
+      summary: 'Show a user'
+      operationId: showAUser
+      description: ''
+      parameters: []
+      responses:
+        200:
+          description: 'The user'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 1
+                    name: 'Ahmad Faizal bin Hassan'
+                    email: ahmad.faizal@example.com
+                    phone_number: 012-3456789
+                    status: active
+                    is_admin: false
+                    created_at: '2026-10-01T09:00:00+00:00'
+                    updated_at: '2026-10-01T09:00:00+00:00'
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: 'Ahmad Faizal bin Hassan'
+                      email:
+                        type: string
+                        example: ahmad.faizal@example.com
+                      phone_number:
+                        type: string
+                        example: 012-3456789
+                      status:
+                        type: string
+                        example: active
+                      is_admin:
+                        type: boolean
+                        example: false
+                      created_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+                      updated_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The token belongs to a user who is no longer an active admin'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+        404:
+          description: 'No user with this ID, or the user is soft deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'No query results for model [App\Models\User] 999.'
+                properties:
+                  message:
+                    type: string
+                    example: 'No query results for model [App\Models\User] 999.'
+      tags:
+        - Users
+    put:
+      summary: 'Update a user'
+      operationId: updateAUser
+      description: 'Send all fields, like when creating. `password` is optional: leave it out to keep the current password. `is_admin` is ignored; it can only be changed on the web Users page. An admin cannot change their own status. `PUT` works the same way.'
+      parameters: []
+      responses:
+        200:
+          description: 'The updated user'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  data:
+                    id: 1
+                    name: 'Ahmad Faizal bin Hassan'
+                    email: ahmad.faizal@example.com
+                    phone_number: 012-3456789
+                    status: active
+                    is_admin: false
+                    created_at: '2026-10-01T09:00:00+00:00'
+                    updated_at: '2026-10-01T09:00:00+00:00'
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: 'Ahmad Faizal bin Hassan'
+                      email:
+                        type: string
+                        example: ahmad.faizal@example.com
+                      phone_number:
+                        type: string
+                        example: 012-3456789
+                      status:
+                        type: string
+                        example: active
+                      is_admin:
+                        type: boolean
+                        example: false
+                      created_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+                      updated_at:
+                        type: string
+                        example: '2026-10-01T09:00:00+00:00'
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: 'The token belongs to a user who is no longer an active admin'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'Your account is not active.'
+                properties:
+                  message:
+                    type: string
+                    example: 'Your account is not active.'
+        404:
+          description: 'No user with this ID, or the user is soft deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'No query results for model [App\Models\User] 999.'
+                properties:
+                  message:
+                    type: string
+                    example: 'No query results for model [App\Models\User] 999.'
+        422:
+          description: 'Validation error, e.g. an admin changing their own status'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'You cannot change your own status.'
+                  errors:
+                    status:
+                      - 'You cannot change your own status.'
+                properties:
+                  message:
+                    type: string
+                    example: 'You cannot change your own status.'
+                  errors:
+                    type: object
+                    properties:
+                      status:
+                        type: array
+                        example:
+                          - 'You cannot change your own status.'
+                        items:
+                          type: string
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 'Full name. Max 255 characters. Must not be greater than 255 characters.'
+                  example: 'Ahmad Faizal bin Hassan'
+                email:
+                  type: string
+                  description: "Email address. Must be unique; the user's current email is allowed. Must be a valid email address. Must not be greater than 255 characters."
+                  example: ahmad.faizal@example.com
+                phone_number:
+                  type: string
+                  description: "Phone number. Must be unique; the user's current number is allowed. Max 20 characters. Must not be greater than 20 characters."
+                  example: 012-3456789
+                password:
+                  type: string
+                  description: 'New password. Leave it out to keep the current password.'
+                  example: N3w!Passw0rd
+                  nullable: true
+                status:
+                  type: string
+                  description: 'One of `active`, `inactive` or `suspended`. An admin cannot change their own status.'
+                  example: active
+                  enum:
+                    - active
+                    - inactive
+                    - suspended
+                password_confirmation:
+                  type: string
+                  description: 'Must match `password` when a new password is sent.'
+                  example: N3w!Passw0rd
+              required:
+                - name
+                - email
+                - phone_number
+                - status
+    delete:
+      summary: 'Delete a user'
+      operationId: deleteAUser
+      description: 'Soft deletes the user: they disappear from the list and can no longer log in, but their email and phone number stay reserved. An admin cannot delete themselves.'
+      parameters: []
+      responses:
+        200:
+          description: 'User deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'User Tan Mei Ling deleted.'
+                properties:
+                  message:
+                    type: string
+                    example: 'User Tan Mei Ling deleted.'
+        401:
+          description: 'No token, or the token is invalid, expired or blacklisted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: Unauthenticated.
+                properties:
+                  message:
+                    type: string
+                    example: Unauthenticated.
+        403:
+          description: ''
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  -
+                    description: 'The token belongs to a user who is no longer an active admin'
+                    type: object
+                    example:
+                      message: 'Your account is not active.'
+                    properties:
+                      message:
+                        type: string
+                        example: 'Your account is not active.'
+                  -
+                    description: 'The admin tried to delete themselves'
+                    type: object
+                    example:
+                      message: 'You cannot delete your own account.'
+                    properties:
+                      message:
+                        type: string
+                        example: 'You cannot delete your own account.'
+        404:
+          description: 'No user with this ID, or the user is already deleted'
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  message: 'No query results for model [App\Models\User] 999.'
+                properties:
+                  message:
+                    type: string
+                    example: 'No query results for model [App\Models\User] 999.'
+      tags:
+        - Users
+    parameters:
+      -
+        in: path
+        name: id
+        description: 'The ID of the user.'
+        example: 1
+        required: true
+        schema:
+          type: integer

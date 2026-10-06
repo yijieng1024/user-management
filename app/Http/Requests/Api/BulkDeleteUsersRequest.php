@@ -6,8 +6,14 @@ use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Knuckles\Scribe\Attributes\BodyParam;
 use Stringable;
 
+/**
+ * The API docs attribute is needed because Scribe merges `ids` and `ids.*`
+ * and would otherwise show `ids` as optional.
+ */
+#[BodyParam('ids', 'integer[]', 'IDs of the users to delete: 1 to 1000 distinct IDs of existing, non-deleted users. The logged-in admin\'s own ID is skipped.', required: true, example: [12, 15, 18])]
 class BulkDeleteUsersRequest extends FormRequest
 {
     /**

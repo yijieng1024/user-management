@@ -1,0 +1,188 @@
+name: Authentication
+description: 'Get, refresh and revoke the JWT used to call the other endpoints.'
+endpoints:
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/login
+    metadata:
+      custom: []
+      groupName: Authentication
+      groupDescription: 'Get, refresh and revoke the JWT used to call the other endpoints.'
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Log in'
+      description: "Exchange an admin's email and password for a JWT. Only admins whose status is `active` get a token. Limited to 5 requests per minute per email + IP address."
+      authenticated: false
+      deprecated: false
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      email:
+        custom: []
+        name: email
+        description: "The admin's email address."
+        required: true
+        example: admin@example.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+      password:
+        custom: []
+        name: password
+        description: "The admin's password."
+        required: true
+        example: password
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        deprecated: false
+    cleanBodyParameters:
+      email: admin@example.com
+      password: password
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature","token_type":"bearer","expires_in":3600}'
+        headers: []
+        description: 'Logged in. Send the token as `Authorization: Bearer {access_token}`. `expires_in` is in seconds.'
+      -
+        custom: []
+        status: 422
+        content: '{"message":"These credentials do not match our records.","errors":{"email":["These credentials do not match our records."]}}'
+        headers: []
+        description: 'Wrong email or password'
+      -
+        custom: []
+        status: 422
+        content: '{"message":"You do not have admin access.","errors":{"email":["You do not have admin access."]}}'
+        headers: []
+        description: 'Correct password, but the user is not an admin'
+      -
+        custom: []
+        status: 422
+        content: '{"message":"Your account is not active.","errors":{"email":["Your account is not active."]}}'
+        headers: []
+        description: 'Correct password, but the admin is inactive or suspended'
+      -
+        custom: []
+        status: 429
+        content: '{"message":"Too Many Attempts."}'
+        headers: []
+        description: 'More than 5 attempts in a minute for this email + IP address'
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/refresh
+    metadata:
+      custom: []
+      groupName: Authentication
+      groupDescription: 'Get, refresh and revoke the JWT used to call the other endpoints.'
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Refresh a token'
+      description: 'Send the current token (it may already be expired) and get a new one. The old token is blacklisted. A token can be refreshed for up to 1 day after it was first issued. Fails if the user is no longer an active admin.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.new-signature","token_type":"bearer","expires_in":3600}'
+        headers: []
+        description: 'New token'
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: 'No token, an invalid or blacklisted token, or older than the 1-day refresh window'
+      -
+        custom: []
+        status: 403
+        content: '{"message":"Your account is not active."}'
+        headers: []
+        description: 'The user is no longer an active admin. Both the old and the new token are blacklisted.'
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 6g43cv8PD1aE5beadkZfhV6'
+    controller: null
+    method: null
+    route: null
+  -
+    custom: []
+    httpMethods:
+      - POST
+    uri: api/logout
+    metadata:
+      custom: []
+      groupName: Authentication
+      groupDescription: 'Get, refresh and revoke the JWT used to call the other endpoints.'
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Log out'
+      description: 'Blacklist the current token so it can no longer be used.'
+      authenticated: true
+      deprecated: false
+    headers:
+      Authorization: 'Bearer {YOUR_ACCESS_TOKEN}'
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        custom: []
+        status: 200
+        content: '{"message":"Successfully logged out."}'
+        headers: []
+        description: 'Logged out'
+      -
+        custom: []
+        status: 401
+        content: '{"message":"Unauthenticated."}'
+        headers: []
+        description: 'No token, or the token is invalid, expired or already blacklisted'
+    responseFields: []
+    auth:
+      - headers
+      - Authorization
+      - 'Bearer 6g43cv8PD1aE5beadkZfhV6'
+    controller: null
+    method: null
+    route: null

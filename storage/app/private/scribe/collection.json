@@ -1,0 +1,542 @@
+{
+    "variable": [
+        {
+            "id": "baseUrl",
+            "key": "baseUrl",
+            "type": "string",
+            "name": "string",
+            "value": "http:\/\/localhost:8000"
+        }
+    ],
+    "info": {
+        "name": "User Management API Documentation",
+        "_postman_id": "a2407541-6868-4e5a-9a6f-0a92c11a7fd3",
+        "description": "REST API for the admin-only User Management system: JWT authentication and user management (list, create, show, update, soft delete, bulk delete).",
+        "schema": "https:\/\/schema.getpostman.com\/json\/collection\/v2.1.0\/collection.json"
+    },
+    "item": [
+        {
+            "name": "Authentication",
+            "description": "Get, refresh and revoke the JWT used to call the other endpoints.",
+            "item": [
+                {
+                    "name": "Log in",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/login",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/login"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"email\":\"admin@example.com\",\"password\":\"password\"}"
+                        },
+                        "description": "Exchange an admin's email and password for a JWT. Only admins whose status is `active` get a token. Limited to 5 requests per minute per email + IP address.",
+                        "auth": {
+                            "type": "noauth"
+                        }
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"access_token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature\",\"token_type\":\"bearer\",\"expires_in\":3600}",
+                            "name": "Logged in. Send the token as `Authorization: Bearer {access_token}`. `expires_in` is in seconds."
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"These credentials do not match our records.\",\"errors\":{\"email\":[\"These credentials do not match our records.\"]}}",
+                            "name": "Wrong email or password"
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"You do not have admin access.\",\"errors\":{\"email\":[\"You do not have admin access.\"]}}",
+                            "name": "Correct password, but the user is not an admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"Your account is not active.\",\"errors\":{\"email\":[\"Your account is not active.\"]}}",
+                            "name": "Correct password, but the admin is inactive or suspended"
+                        },
+                        {
+                            "header": [],
+                            "code": 429,
+                            "body": "{\"message\":\"Too Many Attempts.\"}",
+                            "name": "More than 5 attempts in a minute for this email + IP address"
+                        }
+                    ]
+                },
+                {
+                    "name": "Refresh a token",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/refresh",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/refresh"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Send the current token (it may already be expired) and get a new one. The old token is blacklisted. A token can be refreshed for up to 1 day after it was first issued. Fails if the user is no longer an active admin."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"access_token\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.new-signature\",\"token_type\":\"bearer\",\"expires_in\":3600}",
+                            "name": "New token"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, an invalid or blacklisted token, or older than the 1-day refresh window"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The user is no longer an active admin. Both the old and the new token are blacklisted."
+                        }
+                    ]
+                },
+                {
+                    "name": "Log out",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/logout",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/logout"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Blacklist the current token so it can no longer be used."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"Successfully logged out.\"}",
+                            "name": "Logged out"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or already blacklisted"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Users",
+            "description": "Manage users. Every endpoint needs a token from an active admin; a suspended admin is blocked on their next request, even with an unexpired token. Limited to 60 requests per minute.",
+            "item": [
+                {
+                    "name": "Delete many users",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users\/bulk-delete",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/users\/bulk-delete"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"ids\":[12,15,18]}"
+                        },
+                        "description": "Soft deletes all the given users in a single query. The logged-in admin's own ID is always skipped. If any ID is invalid, nothing is deleted. Returns how many users were deleted."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"deleted\":3}",
+                            "name": "Users deleted"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"One or more of the selected users do not exist or have already been deleted.\",\"errors\":{\"ids\":[\"One or more of the selected users do not exist or have already been deleted.\"]}}",
+                            "name": "An ID does not exist or the user is already deleted"
+                        }
+                    ]
+                },
+                {
+                    "name": "List users",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users",
+                            "query": [
+                                {
+                                    "key": "status",
+                                    "value": "active",
+                                    "description": "Only return users with this status: `active`, `inactive` or `suspended`. Any other value is ignored.",
+                                    "disabled": false
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "ahmad",
+                                    "description": "Return users whose name, email or phone number contains this text.",
+                                    "disabled": false
+                                },
+                                {
+                                    "key": "page",
+                                    "value": "1",
+                                    "description": "The page number.",
+                                    "disabled": false
+                                }
+                            ],
+                            "raw": "{{baseUrl}}\/api\/users?status=active&search=ahmad&page=1"
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Users are returned newest first, 10 per page. Soft-deleted users are not included. `status` and `search` can be combined."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"data\":[{\"id\":1,\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"status\":\"active\",\"is_admin\":false,\"created_at\":\"2026-10-01T09:00:00+00:00\",\"updated_at\":\"2026-10-01T09:00:00+00:00\"},{\"id\":1,\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"status\":\"active\",\"is_admin\":false,\"created_at\":\"2026-10-01T09:00:00+00:00\",\"updated_at\":\"2026-10-01T09:00:00+00:00\"}],\"links\":{\"first\":\"\\\/?page=1\",\"last\":\"\\\/?page=1\",\"prev\":null,\"next\":null},\"meta\":{\"current_page\":1,\"from\":1,\"last_page\":1,\"links\":[{\"url\":null,\"label\":\"&laquo; Previous\",\"page\":null,\"active\":false},{\"url\":\"\\\/?page=1\",\"label\":\"1\",\"page\":1,\"active\":true},{\"url\":null,\"label\":\"Next &raquo;\",\"page\":null,\"active\":false}],\"path\":\"\\\/\",\"per_page\":10,\"to\":2,\"total\":2}}",
+                            "name": "A page of users"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        }
+                    ]
+                },
+                {
+                    "name": "Create a user",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/users"
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"password\":\"S3cure!Passw0rd\",\"status\":\"active\",\"password_confirmation\":\"S3cure!Passw0rd\"}"
+                        },
+                        "description": "Users created through the API are never admins: `is_admin` is ignored if sent. Admins can only be created from the web Users page."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 201,
+                            "body": "{\"data\":{\"id\":1,\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"status\":\"active\",\"is_admin\":false,\"created_at\":\"2026-10-01T09:00:00+00:00\",\"updated_at\":\"2026-10-01T09:00:00+00:00\"}}",
+                            "name": "User created"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"The email has already been taken. (and 1 more error)\",\"errors\":{\"email\":[\"The email has already been taken.\"],\"phone_number\":[\"The phone number has already been taken.\"]}}",
+                            "name": "Validation error. Soft-deleted users still count as taking their email and phone number."
+                        }
+                    ]
+                },
+                {
+                    "name": "Show a user",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/users\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": 1,
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": ""
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"data\":{\"id\":1,\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"status\":\"active\",\"is_admin\":false,\"created_at\":\"2026-10-01T09:00:00+00:00\",\"updated_at\":\"2026-10-01T09:00:00+00:00\"}}",
+                            "name": "The user"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 404,
+                            "body": "{\"message\":\"No query results for model [App\\\\Models\\\\User] 999.\"}",
+                            "name": "No user with this ID, or the user is soft deleted"
+                        }
+                    ]
+                },
+                {
+                    "name": "Update a user",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/users\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": 1,
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"password\":\"N3w!Passw0rd\",\"status\":\"active\",\"password_confirmation\":\"N3w!Passw0rd\"}"
+                        },
+                        "description": "Send all fields, like when creating. `password` is optional: leave it out to keep the current password. `is_admin` is ignored; it can only be changed on the web Users page. An admin cannot change their own status. `PUT` works the same way."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"data\":{\"id\":1,\"name\":\"Ahmad Faizal bin Hassan\",\"email\":\"ahmad.faizal@example.com\",\"phone_number\":\"012-3456789\",\"status\":\"active\",\"is_admin\":false,\"created_at\":\"2026-10-01T09:00:00+00:00\",\"updated_at\":\"2026-10-01T09:00:00+00:00\"}}",
+                            "name": "The updated user"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 404,
+                            "body": "{\"message\":\"No query results for model [App\\\\Models\\\\User] 999.\"}",
+                            "name": "No user with this ID, or the user is soft deleted"
+                        },
+                        {
+                            "header": [],
+                            "code": 422,
+                            "body": "{\"message\":\"You cannot change your own status.\",\"errors\":{\"status\":[\"You cannot change your own status.\"]}}",
+                            "name": "Validation error, e.g. an admin changing their own status"
+                        }
+                    ]
+                },
+                {
+                    "name": "Delete a user",
+                    "request": {
+                        "url": {
+                            "host": "{{baseUrl}}",
+                            "path": "api\/users\/:id",
+                            "query": [],
+                            "raw": "{{baseUrl}}\/api\/users\/:id",
+                            "variable": [
+                                {
+                                    "id": "id",
+                                    "key": "id",
+                                    "value": 2,
+                                    "description": "The ID of the user."
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application\/json"
+                            },
+                            {
+                                "key": "Accept",
+                                "value": "application\/json"
+                            }
+                        ],
+                        "body": null,
+                        "description": "Soft deletes the user: they disappear from the list and can no longer log in, but their email and phone number stay reserved. An admin cannot delete themselves."
+                    },
+                    "response": [
+                        {
+                            "header": [],
+                            "code": 200,
+                            "body": "{\"message\":\"User Tan Mei Ling deleted.\"}",
+                            "name": "User deleted"
+                        },
+                        {
+                            "header": [],
+                            "code": 401,
+                            "body": "{\"message\":\"Unauthenticated.\"}",
+                            "name": "No token, or the token is invalid, expired or blacklisted"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"Your account is not active.\"}",
+                            "name": "The token belongs to a user who is no longer an active admin"
+                        },
+                        {
+                            "header": [],
+                            "code": 403,
+                            "body": "{\"message\":\"You cannot delete your own account.\"}",
+                            "name": "The admin tried to delete themselves"
+                        },
+                        {
+                            "header": [],
+                            "code": 404,
+                            "body": "{\"message\":\"No query results for model [App\\\\Models\\\\User] 999.\"}",
+                            "name": "No user with this ID, or the user is already deleted"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "Authorization",
+                "type": "string"
+            }
+        ]
+    }
+}

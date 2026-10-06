@@ -30,4 +30,14 @@ trait IgnoresIsAdmin
     {
         return Arr::except(parent::rules(), ['is_admin']);
     }
+
+    /**
+     * Get the parent Form Request's documented body parameters, without is_admin.
+     *
+     * @return array<string, array{description: string, example?: mixed}>
+     */
+    public function bodyParameters(): array
+    {
+        return Arr::except(parent::bodyParameters(), ['is_admin']);
+    }
 }

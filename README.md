@@ -4,7 +4,7 @@
 
 An admin-only user management system with a web UI and a REST API, built for the BestWeb Laravel assessment. Admins log in, then list, search, filter, create, edit, soft delete and export users. The same operations are available through a JWT-protected REST API.
 
-**Tech stack:** Laravel 13, PHP 8.3+, MySQL, Livewire starter kit (Livewire 4 + Flux UI), Laravel Fortify (web login), JWT auth ([php-open-source-saver/jwt-auth](https://github.com/PHP-Open-Source-Saver/jwt-auth)), Laravel-Excel ([maatwebsite/excel](https://github.com/SpartnerNL/Laravel-Excel)), PHPUnit.
+**Tech stack:** Laravel 13, PHP 8.3+, MySQL, Livewire starter kit (Livewire 4 + Flux UI), Laravel Fortify (web login), JWT auth ([php-open-source-saver/jwt-auth](https://github.com/PHP-Open-Source-Saver/jwt-auth)), Laravel-Excel ([maatwebsite/excel](https://github.com/SpartnerNL/Laravel-Excel)), Scribe ([knuckleswtf/scribe](https://github.com/knuckleswtf/scribe)) for API docs, PHPUnit.
 
 ## 2. Features
 
@@ -104,7 +104,25 @@ The tests use an in-memory SQLite database (set in `phpunit.xml`), so you don't 
 
 ## 4. API documentation
 
-Interactive API docs: (Scribe — coming next)
+**Interactive API docs** (generated with [Scribe](https://scribe.knuckles.wtf), public, no login needed):
+
+| What | URL |
+|---|---|
+| Docs page with "Try It Out" | http://localhost:8000/docs |
+| OpenAPI 3.0 spec (Swagger-compatible, YAML) | http://localhost:8000/docs.openapi |
+| Postman collection (v2.1) | http://localhost:8000/docs.postman |
+
+(With Herd, replace `http://localhost:8000` with `http://user-management.test`.)
+
+To use "Try It Out": call **Log in** first, copy the `access_token`, and paste it into the auth field of the other endpoints.
+
+The generated docs are committed, so they work right after cloning. After changing the API, regenerate them with:
+
+```bash
+php artisan scribe:generate
+```
+
+Scribe never sends real requests to the API while generating (response calls are turned off), so it can't create, change or delete data. Example responses come from attributes on the controllers and from `UserResource` with in-memory example users (`UserFactory::apiDocsExample()`, never saved).
 
 Base URL: `http://localhost:8000/api` (or `http://user-management.test/api` with Herd).
 Send `Accept: application/json` with every request.
@@ -277,13 +295,11 @@ Same rules as create, except: `password` is optional (leave it out to keep the c
   - tokens are short-lived (**60 minutes**), with a **1-day refresh window**;
   - every request still loads the user from the database to check "admin + active". This gives up some of JWT's statelessness, but it means a suspension takes effect immediately rather than when the token expires.
   - Sanctum was never installed: `php artisan install:api` would install it, so `routes/api.php` was registered manually instead.
-- **Library bug worked around.** After a refresh, jwt-auth leaves its shared token manager in "refresh mode", which skips the expiry check, even when the refresh fails. In a long-running process (Octane, queue workers) that would let expired tokens through. `AuthController::refresh()` resets the flag in a `finally` block, and a test covers it.
 - **Phone number stored as a string.** So leading zeros (`012...`) and `+60` are kept. The Excel export also writes it as text, so Excel doesn't drop the zero.
 - **Excel export.** Always exports all non-deleted users, ignoring the page's current search and filter. Columns: Name, Email, Phone Number, Status, Is Admin (Yes/No), Created At. The password and remember token are never selected from the database.
 - **Validation in one place.** The rules live in `StoreUserRequest` and `UpdateUserRequest`. The Livewire form reads its rules and messages from them, and the API controllers use them directly. The API Form Requests (`app/Http/Requests/Api/`) extend the web ones and only drop `is_admin`.
 - **Shared logic.** Creating, updating, bulk deleting users and checking login credentials are small action classes (`app/Actions/`) used by both the web UI and the API. The status filter and search are one query scope (`User::filter()`) used by both.
-- **Removed starter-kit features.** "Delete my account" and two-factor authentication were removed, since they don't fit an admin-only app where admins manage accounts.
-- **"Swagger or Laravel API resources".** API responses use Laravel API Resources (`UserResource`). Interactive documentation will be generated with Scribe, which produces an OpenAPI (Swagger-compatible) spec.
+- **"Swagger or Laravel API resources".** API responses use Laravel API Resources (`UserResource`). The interactive documentation at `/docs` is generated with Scribe, which also produces an OpenAPI (Swagger-compatible) spec and a Postman collection.
 - **Deployment.** The spec mentions deployment but gives no target, so the project is set up to run locally.
 
 ## 6. Security and performance
@@ -321,7 +337,7 @@ They use an in-memory SQLite database (configured in `phpunit.xml`), so anyone c
 |---|---|---|
 | `tests/Feature/UserManagementTest.php` | 37 | Users page: access (guests, non-admins, inactive admins, login messages), list, status filter, search, pagination, create/update validation (unique email/phone, soft-deleted email still taken, blank password keeps the old one), the is_admin checkbox, single and bulk delete (one query, skips self), self-protection |
 | `tests/Feature/UserExportTest.php` | 12 | Excel export: file name, access (admin / non-admin / inactive / guest), heading row, row values, all non-deleted users, ignores filters, no password or remember token, leading zero kept, chunked reading |
-| `tests/Feature/Api/AuthTest.php` | 19 | JWT login (token response, error messages, 5/min limit), 401 for missing/invalid/expired/blacklisted tokens, refresh (new token, old one dies, 1-day window, suspended admin), logout, the refresh-mode bug regression |
+| `tests/Feature/Api/AuthTest.php` | 19 | JWT login (token response, error messages, 5/min limit), 401 for missing/invalid/expired/blacklisted tokens, refresh (new token, old one dies, 1-day window, suspended admin), logout |
 | `tests/Feature/Api/UserApiTest.php` | 27 | `/api/users`: list with filter/search/pagination, create (201), show, update, delete, bulk delete, is_admin ignored, self-protection, 404 for soft-deleted users, no password in responses, suspended admin blocked mid-token, 60/min limit (429) |
 | `tests/Unit/UserTest.php` | 17 | `isActive()`, `hasAdminAccess()`, `adminAccessDeniedReason()`, the `filter()` scope's SQL (grouping, escaping), hidden fields, `is_admin` not fillable |
 | `tests/Unit/UsersExportTest.php` | 8 | Export headings, row mapping, selected columns, soft-delete exclusion, chunk size, values written as text |
@@ -345,6 +361,7 @@ The files worth looking at first:
 | `app/Http/Controllers/UserExportController.php` | The export download route |
 | `app/Models/User.php` | Statuses, access rules, the `filter()` scope, JWT methods |
 | `routes/web.php`, `routes/api.php` | Routes and their middleware |
+| `config/scribe.php` | API docs settings (public `/docs`, Bearer auth, Try It Out, no response calls) |
 | `app/Providers/` | Fortify login hook and rate limiters |
 | `database/migrations/0001_01_01_000000_create_users_table.php`, `database/seeders/DatabaseSeeder.php` | Users table and seed data |
 | `tests/` | Feature and unit tests (see above) |

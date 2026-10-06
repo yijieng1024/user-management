@@ -68,6 +68,33 @@ class UpdateUserRequest extends StoreUserRequest
     }
 
     /**
+     * Describe the body parameters for the API documentation (Scribe).
+     *
+     * @return array<string, array{description: string, example?: mixed}>
+     */
+    public function bodyParameters(): array
+    {
+        return array_merge(parent::bodyParameters(), [
+            'email' => [
+                'description' => 'Email address. Must be unique; the user\'s current email is allowed.',
+                'example' => 'ahmad.faizal@example.com',
+            ],
+            'phone_number' => [
+                'description' => 'Phone number. Must be unique; the user\'s current number is allowed. Max 20 characters.',
+                'example' => '012-3456789',
+            ],
+            'password' => [
+                'description' => 'New password. Leave it out to keep the current password.',
+                'example' => 'N3w!Passw0rd',
+            ],
+            'status' => [
+                'description' => 'One of `active`, `inactive` or `suspended`. An admin cannot change their own status.',
+                'example' => 'active',
+            ],
+        ]);
+    }
+
+    /**
      * Get the unique rule for the given users column, ignoring the user being updated.
      */
     protected function uniqueRule(string $column): Unique
