@@ -2,15 +2,14 @@
 
 namespace App\Providers;
 
+use App\Actions\Auth\AuthenticateAdmin;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
@@ -35,33 +34,14 @@ class FortifyServiceProvider extends ServiceProvider
     }
 
     /**
-     * Only allow active admins to log in. Users with valid credentials who are not
-     * admins, or whose account is not active, are rejected with a dedicated message
-     * instead of a generic failure.
+     * Only allow active admins to log in (same check as the API login, see AuthenticateAdmin).
      */
     private function configureAuthentication(): void
     {
-        Fortify::authenticateUsing(function (Request $request): ?User {
-            $user = User::where(Fortify::username(), $request->string(Fortify::username())->value())->first();
-
-            if ($user === null || ! Hash::check($request->string('password')->value(), $user->password)) {
-                return null;
-            }
-
-            if (! $user->is_admin) {
-                throw ValidationException::withMessages([
-                    Fortify::username() => __('You do not have admin access.'),
-                ]);
-            }
-
-            if (! $user->isActive()) {
-                throw ValidationException::withMessages([
-                    Fortify::username() => __('Your account is not active.'),
-                ]);
-            }
-
-            return $user;
-        });
+        Fortify::authenticateUsing(fn (Request $request): ?User => app(AuthenticateAdmin::class)(
+            $request->string(Fortify::username())->value(),
+            $request->string('password')->value(),
+        ));
     }
 
     /**

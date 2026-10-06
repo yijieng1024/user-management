@@ -17,8 +17,14 @@ class EnsureUserIsAdmin
     {
         $user = $request->user();
 
-        if ($user?->is_admin !== true || ! $user->isActive()) {
+        if ($user === null) {
             abort(403);
+        }
+
+        $deniedReason = $user->adminAccessDeniedReason();
+
+        if ($deniedReason !== null) {
+            abort(403, $deniedReason);
         }
 
         return $next($request);

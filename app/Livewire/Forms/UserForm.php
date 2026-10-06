@@ -2,10 +2,11 @@
 
 namespace App\Livewire\Forms;
 
+use App\Actions\Users\CreateUser;
+use App\Actions\Users\UpdateUser;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\User;
-use Illuminate\Support\Arr;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Form;
 use Stringable;
@@ -55,9 +56,17 @@ class UserForm extends Form
      */
     protected function rules(): array
     {
-        return $this->user === null
-            ? (new StoreUserRequest)->rules()
-            : (new UpdateUserRequest)->forUser($this->user)->rules();
+        return $this->formRequest()->rules();
+    }
+
+    /**
+     * Get the custom validation messages from the matching Form Request.
+     *
+     * @return array<string, string>
+     */
+    protected function messages(): array
+    {
+        return $this->formRequest()->messages();
     }
 
     /**
@@ -65,11 +74,7 @@ class UserForm extends Form
      */
     public function store(): User
     {
-        $validated = $this->validate();
-
-        $user = new User(Arr::except($validated, ['is_admin']));
-        $user->is_admin = (bool) $validated['is_admin'];
-        $user->save();
+        $user = app(CreateUser::class)($this->validate());
 
         $this->reset();
 
@@ -81,22 +86,23 @@ class UserForm extends Form
      */
     public function update(): User
     {
-        $validated = $this->validate();
-
         /** @var User $user */
         $user = $this->user;
 
-        $user->fill(Arr::except($validated, ['is_admin', 'password']));
-        $user->is_admin = (bool) $validated['is_admin'];
-
-        if (filled($validated['password'] ?? null)) {
-            $user->password = $validated['password'];
-        }
-
-        $user->save();
+        $user = app(UpdateUser::class)($user, $this->validate());
 
         $this->reset();
 
         return $user;
+    }
+
+    /**
+     * Get the Form Request that holds the rules for the current mode (create or edit).
+     */
+    private function formRequest(): StoreUserRequest
+    {
+        return $this->user === null
+            ? new StoreUserRequest
+            : (new UpdateUserRequest)->forUser($this->user);
     }
 }

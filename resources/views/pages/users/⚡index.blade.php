@@ -1,11 +1,11 @@
 <?php
 
+use App\Actions\Users\DeleteUsers;
 use App\Livewire\Forms\UserForm;
 use App\Models\User;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -51,22 +51,10 @@ new #[Title('Users')] class extends Component {
     #[Computed]
     public function users(): LengthAwarePaginator
     {
-        $search = trim($this->search);
-
         return User::query()
-            ->when(
-                in_array($this->status, User::STATUSES, true),
-                fn ($query) => $query->where('status', $this->status),
-            )
-            ->when($search !== '', function ($query) use ($search) {
-                $term = '%'.addcslashes($search, '%_\\').'%';
-
-                $query->where(fn ($query) => $query
-                    ->where('name', 'like', $term)
-                    ->orWhere('email', 'like', $term)
-                    ->orWhere('phone_number', 'like', $term));
-            })
+            ->filter($this->status, $this->search)
             ->latest()
+            ->latest('id')
             ->paginate(10);
     }
 
@@ -122,20 +110,6 @@ new #[Title('Users')] class extends Component {
      */
     public function save(): void
     {
-        $isEditingSelf = $this->form->user?->is(Auth::user()) === true;
-
-        if ($isEditingSelf && ! $this->form->is_admin) {
-            throw ValidationException::withMessages([
-                'form.is_admin' => __('You cannot remove your own admin access.'),
-            ]);
-        }
-
-        if ($isEditingSelf && $this->form->status !== 'active') {
-            throw ValidationException::withMessages([
-                'form.status' => __('You cannot change your own status.'),
-            ]);
-        }
-
         if ($this->form->user === null) {
             $user = $this->form->store();
             $message = __('User :name created.', ['name' => $user->name]);
@@ -197,14 +171,9 @@ new #[Title('Users')] class extends Component {
     /**
      * Soft delete all selected users in a single query, never including the logged-in admin.
      */
-    public function deleteSelected(): void
+    public function deleteSelected(DeleteUsers $deleteUsers): void
     {
-        $ids = array_map('intval', $this->selected);
-
-        $deleted = User::query()
-            ->whereIn('id', $ids)
-            ->whereKeyNot(Auth::id())
-            ->delete();
+        $deleted = $deleteUsers($this->selected, Auth::user());
 
         $this->selected = [];
 
