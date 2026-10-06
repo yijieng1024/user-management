@@ -34,6 +34,13 @@ class User extends Authenticatable
     use HasFactory, Notifiable, SoftDeletes;
 
     /**
+     * The allowed values for the status column.
+     *
+     * @var list<string>
+     */
+    public const array STATUSES = ['active', 'inactive', 'suspended'];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -45,6 +52,14 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
         ];
+    }
+
+    /**
+     * Determine whether the user's status is active.
+     */
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
     }
 
     /**
