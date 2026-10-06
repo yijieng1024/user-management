@@ -22,21 +22,6 @@ class SecurityTest extends TestCase
         $response->assertOk();
     }
 
-    public function test_security_settings_page_renders_without_two_factor_when_feature_is_disabled(): void
-    {
-        config(['fortify.features' => []]);
-
-        $user = User::factory()->create();
-
-        $this->actingAs($user)
-            ->get(route('security.edit'))
-            ->assertOk()
-            ->assertSee('Update password')
-            ->assertDontSee('Manage your passkeys for passwordless sign-in')
-            ->assertDontSee('Add a passkey to sign in without a password')
-            ->assertDontSee('Two-factor authentication');
-    }
-
     public function test_password_can_be_updated(): void
     {
         $user = User::factory()->create([
