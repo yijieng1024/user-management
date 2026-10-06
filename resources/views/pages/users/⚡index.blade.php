@@ -220,9 +220,16 @@ new #[Title('Users')] class extends Component {
             <flux:subheading>{{ __('Manage user accounts, status and admin access') }}</flux:subheading>
         </div>
 
-        <flux:button variant="primary" icon="plus" wire:click="create" data-test="create-user-button">
-            {{ __('Add user') }}
-        </flux:button>
+        <div class="flex items-center gap-2">
+            {{-- Plain link (no wire:navigate) so the browser downloads the file. Exports all users, ignoring the filters. --}}
+            <flux:button :href="route('users.export')" icon="arrow-down-tray" data-test="export-users-button">
+                {{ __('Export to Excel') }}
+            </flux:button>
+
+            <flux:button variant="primary" icon="plus" wire:click="create" data-test="create-user-button">
+                {{ __('Add user') }}
+            </flux:button>
+        </div>
     </div>
 
     <div class="mb-4 flex flex-wrap items-center justify-between gap-4">

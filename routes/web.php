@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\UserExportController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -8,6 +9,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
 
     Route::livewire('users', 'pages::users.index')->name('users.index');
+    Route::get('users/export', UserExportController::class)->name('users.export');
 });
 
 require __DIR__.'/settings.php';
