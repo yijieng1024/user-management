@@ -55,9 +55,4 @@ class UserFactory extends Factory
             'is_admin' => true,
         ]);
     }
-
-    /**
-     * Indicate that the model has two-factor authentication configured.
-     */
-    public function withTwoFactor(): static {}
 }
